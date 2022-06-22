@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../base/namespaces/info/namoespace # This will create the namespace(d) resources
+- ../../base/namespaces/podinfo/podinfo
+- ../../base/namespaces/podinfo/bookinfo
+
+patches:
+- patch.yaml

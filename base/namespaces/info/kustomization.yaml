@@ -3,5 +3,5 @@ kind: Kustomization
 resources:
 - namespace.yaml
 - networkpolicy.yaml
-- podinfo/kustomization.yaml
+- podinfo/
 

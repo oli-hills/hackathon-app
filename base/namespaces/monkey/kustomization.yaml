@@ -4,3 +4,4 @@ resources:
 - namespace.yaml
 - monkey/
 - gw-vs.yaml
+- fancymonkey/

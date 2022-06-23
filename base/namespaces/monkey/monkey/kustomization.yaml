@@ -3,5 +3,4 @@ kind: Kustomization
 namespace: monkey
 resources:
 - deployment.yaml
-- gw-vs.yaml
 - svc.yaml

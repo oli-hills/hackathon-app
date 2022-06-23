@@ -1324,6 +1324,14 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
+    app: flagger-prometheus
+  name: flagger-prometheus
+  namespace: flagger-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
     app: flagger
   name: flagger
   namespace: istio-system
@@ -1554,6 +1562,36 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app: flagger-prometheus
+  name: flagger-prometheus
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - services
+  - endpoints
+  - pods
+  - nodes/proxy
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
@@ -1567,6 +1605,180 @@ subjects:
 - kind: ServiceAccount
   name: flagger
   namespace: istio-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app: flagger-prometheus
+  name: flagger-prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flagger-prometheus
+subjects:
+- kind: ServiceAccount
+  name: flagger-prometheus
+  namespace: flagger-system
+---
+apiVersion: v1
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s
+    scrape_configs:
+
+    # scrape config for AppMesh Envoy sidecar
+    - job_name: 'appmesh-envoy'
+      metrics_path: /stats/prometheus
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        action: keep
+        regex: '^envoy$'
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: ${1}:9901
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+      # exclude high cardinality metrics
+      metric_relabel_configs:
+      - source_labels: [ cluster_name ]
+        regex: '(outbound|inbound|prometheus_stats).*'
+        action: drop
+      - source_labels: [ tcp_prefix ]
+        regex: '(outbound|inbound|prometheus_stats).*'
+        action: drop
+      - source_labels: [ listener_address ]
+        regex: '(.+)'
+        action: drop
+      - source_labels: [ http_conn_manager_listener_prefix ]
+        regex: '(.+)'
+        action: drop
+      - source_labels: [ http_conn_manager_prefix ]
+        regex: '(.+)'
+        action: drop
+      - source_labels: [ __name__ ]
+        regex: 'envoy_tls.*'
+        action: drop
+      - source_labels: [ __name__ ]
+        regex: 'envoy_tcp_downstream.*'
+        action: drop
+      - source_labels: [ __name__ ]
+        regex: 'envoy_http_(stats|admin).*'
+        action: drop
+      - source_labels: [ __name__ ]
+        regex: 'envoy_cluster_(lb|retry|bind|internal|max|original).*'
+        action: drop
+
+    # scrape config for API servers
+    - job_name: 'kubernetes-apiservers'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - default
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: kubernetes;https
+
+    # scrape config for cAdvisor
+    - job_name: 'kubernetes-cadvisor'
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+      # exclude high cardinality metrics
+      metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: (container|machine)_(cpu|memory|network|fs)_(.+)
+        action: keep
+      - source_labels: [__name__]
+        regex: container_memory_failures_total
+        action: drop
+
+    # scrape config for pods
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+      - source_labels: [ __address__ ]
+        regex: '.*9901.*'
+        action: drop
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_pod_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_name
+        target_label: kubernetes_pod_name
+kind: ConfigMap
+metadata:
+  labels:
+    app: flagger-prometheus
+  name: flagger-prometheus-b6dttbf7h2
+  namespace: flagger-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: flagger-prometheus
+  name: flagger-prometheus
+  namespace: flagger-system
+spec:
+  ports:
+  - name: http
+    port: 9090
+    protocol: TCP
+  selector:
+    app: flagger-prometheus
 ---
 apiVersion: v1
 kind: Service
@@ -1582,6 +1794,61 @@ spec:
     targetPort: 8080
   selector:
     app: monkey
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: flagger-prometheus
+  name: flagger-prometheus
+  namespace: flagger-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flagger-prometheus
+  template:
+    metadata:
+      annotations:
+        appmesh.k8s.aws/sidecarInjectorWebhook: disabled
+        sidecar.istio.io/inject: "false"
+      labels:
+        app: flagger-prometheus
+    spec:
+      containers:
+      - args:
+        - --storage.tsdb.retention=2h
+        - --config.file=/etc/prometheus/prometheus.yml
+        image: prom/prometheus:v2.34.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9090
+        name: prometheus
+        ports:
+        - containerPort: 9090
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+        resources:
+          requests:
+            cpu: 10m
+            memory: 128Mi
+        volumeMounts:
+        - mountPath: /etc/prometheus
+          name: config-volume
+        - mountPath: /prometheus/data
+          name: data-volume
+      serviceAccountName: flagger-prometheus
+      volumes:
+      - configMap:
+          name: flagger-prometheus-b6dttbf7h2
+        name: config-volume
+      - emptyDir: {}
+        name: data-volume
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1847,7 +2114,6 @@ apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
   name: monkey-gateway
-  namespace: monkey
 spec:
   selector:
     istio: ingressgateway
@@ -1863,7 +2129,6 @@ apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
   name: monkey
-  namespace: monkey
 spec:
   gateways:
   - monkey-gateway
@@ -1872,9 +2137,34 @@ spec:
   http:
   - match:
     - uri:
-        prefix: /
+        prefix: /a
+    name: monkey
+    rewrite:
+      uri: /
     route:
     - destination:
         host: monkey
         port:
           number: 7777
+  - match:
+    - uri:
+        prefix: /info
+    name: info
+    rewrite:
+      uri: /
+    route:
+    - destination:
+        host: podinfo.info.svc.cluster.local
+        port:
+          number: 9898
+  - match:
+    - uri:
+        prefix: /fancy
+    name: fancy
+    rewrite:
+      uri: /
+    route:
+    - destination:
+        host: fancymonkey
+        port:
+          number: 8080

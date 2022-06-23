@@ -45,3 +45,14 @@ spec:
         host:  podinfo.info.svc.cluster.local
         port:
           number:  9898
+  - name: "fancy"
+    match:
+    - uri:
+        prefix: "/fancy"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        host: fancymonkey
+        port:
+          number:  8080

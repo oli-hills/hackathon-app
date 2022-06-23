@@ -23,11 +23,25 @@ spec:
   gateways:
     - monkey-gateway
   http:
-    - match:
-        - uri:
-            prefix: /
-      route:
-        - destination:
-            port:
-              number: 7777
-            host: monkey
+  - name: "monkey"
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        host: monkey
+        port:
+          number:  7777
+  - name: "info"
+    match:
+    - uri:
+        prefix: "/info"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        host:  podinfo.info.svc.cluster.local
+        port:
+          number:  9898

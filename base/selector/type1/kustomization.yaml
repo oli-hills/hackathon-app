@@ -3,4 +3,4 @@ kind: Kustomization
 resources:
 - ../../namespaces/info/
 - ../../namespaces/istio-system/
-#- ../../namespaces/monkey/
+- ../../namespaces/monkey/

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fancymonkey
+spec:
+  selector:
+    matchLabels:
+      app: fancymonkey
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: fancymonkey
+    spec:
+      containers:
+        - name: fancymonkey
+          image: unassignedbit/fancymonkey:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: KUBERNETES_NODENAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 3

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fancymonkey
+spec:
+  selector:
+    app: fancymonkey
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      name: http-web-fancy
+      appProtocol: http

@@ -1,0 +1,5 @@
+namespace: istio-system
+bases:
+  - flagger/
+patchesStrategicMerge:
+  - patch.yaml

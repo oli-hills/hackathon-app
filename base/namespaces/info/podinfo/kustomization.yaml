@@ -2,3 +2,4 @@ namespace: info
 resources:
   - hpa.yaml
   - deployment.yaml
+  - canary.yaml

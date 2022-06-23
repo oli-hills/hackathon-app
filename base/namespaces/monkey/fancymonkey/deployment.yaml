@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: fancymonkey
-          image: unassignedbit/fancymonkey:v1
+          image: unassignedbit/fancymonkey:v2
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

@@ -4,4 +4,4 @@ resources:
 - ../../namespaces/info/
 - ../../namespaces/istio-system/
 - ../../namespaces/monkey/
-- ../../namespaces/flagger-system/prometheus/
+#- ../../namespaces/flagger-system/prometheus/

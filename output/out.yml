@@ -1783,6 +1783,21 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  name: fancymonkey
+  namespace: monkey
+spec:
+  ports:
+  - appProtocol: http
+    name: http-web-fancy
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: fancymonkey
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: monkey
   namespace: monkey
 spec:
@@ -1997,6 +2012,45 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: fancymonkey
+  namespace: monkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fancymonkey
+  template:
+    metadata:
+      labels:
+        app: fancymonkey
+    spec:
+      containers:
+      - env:
+        - name: KUBERNETES_NODENAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        image: unassignedbit/fancymonkey:v1
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 3
+        name: fancymonkey
+        ports:
+        - containerPort: 8000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: monkey
   namespace: monkey
 spec:
@@ -2114,6 +2168,7 @@ apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
   name: monkey-gateway
+  namespace: monkey
 spec:
   selector:
     istio: ingressgateway
@@ -2129,6 +2184,7 @@ apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
   name: monkey
+  namespace: monkey
 spec:
   gateways:
   - monkey-gateway
